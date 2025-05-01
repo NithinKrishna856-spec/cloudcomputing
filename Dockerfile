@@ -1,24 +1,21 @@
-FROM jupyter/pyspark-notebook:latest
+FROM openjdk:11
+
+# Install Spark
+RUN apt-get update && apt-get install -y wget curl python3 && \
+    wget https://dlcdn.apache.org/spark/spark-3.4.1/spark-3.4.1-bin-hadoop3.tgz && \
+    tar xvf spark-3.4.1-bin-hadoop3.tgz && \
+    mv spark-3.4.1-bin-hadoop3 /opt/spark
+
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:$SPARK_HOME/bin
 
 WORKDIR /app
 
-# Install Python dependencies (using conda)
-RUN conda install -y pandas scikit-learn boto3 && \
-    conda clean -afy
+COPY WineQualityTraining.java .
+COPY WineQualityPrediction.java .
 
-# Install Hadoop AWS and AWS Java SDK JARs into Spark
-USER root
-ENV SPARK_HOME=/usr/local/spark
+# Compile the Java files
+RUN javac -cp "$SPARK_HOME/jars/*" WineQualityTraining.java WineQualityPrediction.java
 
-# Download JARs into the Spark classpath
-ADD https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.2/hadoop-aws-3.3.2.jar $SPARK_HOME/jars/
-ADD https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.1026/aws-java-sdk-bundle-1.11.1026.jar $SPARK_HOME/jars/
-
-USER jovyan
-
-# Copy scripts
-COPY wine_quality_training.py /app/
-COPY wine_quality_prediction.py /app/
-
-# Set entry point to the prediction script
-ENTRYPOINT ["spark-submit", "/app/wine_quality_prediction.py"]
+# Default to running prediction
+ENTRYPOINT ["spark-submit", "--class", "WineQualityPrediction", "--master", "local", "WineQualityPrediction"]
